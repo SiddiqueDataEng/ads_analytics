@@ -5,7 +5,7 @@ Self-explaining KPIs · Storytelling · Hover Insights · Issue→Solution→Ben
 Regional Reporting (US, UK, CA, AU)  ·  Quality Score · Impression Share · Forecasting · ML
 """
 # ── stdlib ──────────────────────────────────────────────────────────────
-import sqlite3, warnings
+import os, sqlite3, warnings
 from datetime import datetime, timedelta
 
 # ── third-party ─────────────────────────────────────────────────────────
@@ -27,8 +27,16 @@ warnings.filterwarnings("ignore")
 # ════════════════════════════════════════════════════════════════════════
 #  CONFIG
 # ════════════════════════════════════════════════════════════════════════
-OAI_KEY   = "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"
-ANT_KEY   = "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"
+def secret(name):
+    try:
+        value = st.secrets.get(name)
+    except Exception:
+        value = None
+    return value or os.getenv(name, "")
+
+
+OAI_KEY   = secret("OPENAI_API_KEY")
+ANT_KEY   = secret("ANTHROPIC_API_KEY")
 DB_PATH   = "ads_dashboard.db"
 BUDGET    = 50_000   # daily budget target
 
@@ -281,10 +289,14 @@ def get_oai(): return OpenAI(api_key=OAI_KEY)
 def ask(prompt, eng="Claude", n=900):
     try:
         if eng=="Claude":
+            if not ANT_KEY:
+                return "AI analysis is unavailable: configure ANTHROPIC_API_KEY in Streamlit secrets."
             r=get_ant().messages.create(model="claude-opus-4-5",max_tokens=n,
                 messages=[{"role":"user","content":prompt}])
             return r.content[0].text
         else:
+            if not OAI_KEY:
+                return "AI analysis is unavailable: configure OPENAI_API_KEY in Streamlit secrets."
             r=get_oai().chat.completions.create(model="gpt-4o",max_tokens=800,
                 messages=[{"role":"system","content":"Senior paid media analytics expert. Concise, data-driven."},
                           {"role":"user","content":prompt}])
