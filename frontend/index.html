@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ads Performance Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0f0; min-height: 100vh; }
+
+    header {
+      background: linear-gradient(90deg, #ff00cc, #cc00ff);
+      padding: 14px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    header h1 { font-size: 1.3rem; font-weight: 700; color: #fff; letter-spacing: 1px; }
+    header .platform-tabs button {
+      background: rgba(255,255,255,0.15); border: none; color: #fff;
+      padding: 6px 16px; border-radius: 20px; cursor: pointer; margin-left: 6px;
+      font-size: 0.82rem; transition: background 0.2s;
+    }
+    header .platform-tabs button.active,
+    header .platform-tabs button:hover { background: rgba(255,255,255,0.4); }
+
+    .container { padding: 24px 28px; }
+
+    /* Topline KPI Cards */
+    .kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 24px; }
+    .kpi-card {
+      background: #1a1a2e; border-radius: 10px; padding: 18px 14px;
+      border-top: 3px solid #ff00cc; text-align: center;
+    }
+    .kpi-card .label { font-size: 0.72rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    .kpi-card .value { font-size: 1.5rem; font-weight: 700; color: #fff; }
+    .kpi-card .change { font-size: 0.75rem; margin-top: 4px; }
+    .kpi-card .change.up { color: #00e676; }
+    .kpi-card .change.down { color: #ff5252; }
+
+    /* Section headers matching image style */
+    .section-title {
+      background: linear-gradient(90deg, #ff00cc, #cc00ff);
+      color: #fff; padding: 8px 16px; border-radius: 6px 6px 0 0;
+      font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    }
+    .section-subtitle {
+      background: #ffd6f0; color: #333; padding: 6px 16px;
+      font-size: 0.8rem; font-weight: 600;
+    }
+
+    /* Tables */
+    .table-wrap { background: #1a1a2e; border-radius: 0 0 10px 10px; overflow-x: auto; margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    thead th { background: #12122a; color: #cc88ff; padding: 10px 12px; text-align: left; font-weight: 600; }
+    tbody tr:nth-child(even) { background: #14142a; }
+    tbody tr:hover { background: #1f1f3a; }
+    tbody td { padding: 9px 12px; border-bottom: 1px solid #2a2a3e; }
+    .platform-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;
+    }
+    .badge-google { background: #174ea6; color: #90caf9; }
+    .badge-meta { background: #1877f2; color: #e3f2fd; }
+    .badge-microsoft { background: #107c10; color: #a5d6a7; }
+
+    /* Charts row */
+    .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    .chart-card { background: #1a1a2e; border-radius: 10px; padding: 18px; }
+    .chart-card h3 { font-size: 0.85rem; color: #cc88ff; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 1px; }
+    canvas { max-height: 220px; }
+
+    /* Quality Control tables */
+    .quality-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    .quality-card { background: #1a1a2e; border-radius: 10px; overflow: hidden; }
+    .qc-header-call { background: #ffd700; color: #333; }
+    .qc-header-data { background: #ff2020; color: #fff; }
+    .qc-header-attr { background: #b0b8c0; color: #111; }
+
+    /* AI Panel */
+    .ai-panel { background: #1a1a2e; border-radius: 10px; padding: 20px; border-left: 4px solid #cc00ff; margin-bottom: 24px; }
+    .ai-panel h2 { font-size: 1rem; color: #ff00cc; margin-bottom: 14px; }
+    .ai-insight-card {
+      background: #12122a; border-radius: 8px; padding: 14px; margin-bottom: 12px;
+      border-left: 3px solid #555;
+    }
+    .ai-insight-card.critical { border-left-color: #ff5252; }
+    .ai-insight-card.warning { border-left-color: #ffab40; }
+    .ai-insight-card.info { border-left-color: #40c4ff; }
+    .ai-insight-card .type-badge {
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; color: #aaa; margin-bottom: 6px;
+    }
+    .ai-insight-card p { font-size: 0.85rem; line-height: 1.5; color: #ddd; }
+    .ai-run-btn {
+      background: linear-gradient(90deg, #ff00cc, #cc00ff);
+      color: #fff; border: none; padding: 10px 22px; border-radius: 6px;
+      cursor: pointer; font-size: 0.9rem; font-weight: 600; margin-right: 10px;
+    }
+    .ai-run-btn:hover { opacity: 0.85; }
+
+    .refresh-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .refresh-bar select, .refresh-bar input {
+      background: #1a1a2e; color: #e0e0f0; border: 1px solid #333; border-radius: 6px;
+      padding: 7px 12px; font-size: 0.85rem;
+    }
+    .refresh-bar button {
+      background: #ff00cc; color: #fff; border: none; padding: 8px 18px;
+      border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+    }
+    .last-updated { font-size: 0.75rem; color: #666; margin-left: auto; }
+
+    @media (max-width: 900px) {
+      .kpi-row { grid-template-columns: repeat(3, 1fr); }
+      .charts-row { grid-template-columns: 1fr; }
+      .quality-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>📊 Ads Performance Dashboard — Google Real Time</h1>
+  <div class="platform-tabs">
+    <button class="active" onclick="setPlatform('all', this)">All</button>
+    <button onclick="setPlatform('google', this)">Google</button>
+    <button onclick="setPlatform('meta', this)">Meta</button>
+    <button onclick="setPlatform('microsoft', this)">Microsoft</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="refresh-bar">
+    <label style="font-size:0.82rem;color:#aaa">Date:</label>
+    <input type="date" id="dateInput" />
+    <button onclick="loadAll()">Refresh</button>
+    <span class="last-updated" id="lastUpdated"></span>
+  </div>
+
+  <!-- Topline KPI Cards -->
+  <div class="section-title">Topline Table — Main KPIs</div>
+  <div class="section-subtitle">CPL · RPL · CPC · CVR · Margin $ · Margin %</div>
+  <div class="kpi-row" id="kpiRow">
+    <div class="kpi-card"><div class="label">CPL</div><div class="value" id="kpi-cpl">—</div><div class="change" id="kpi-cpl-wow"></div></div>
+    <div class="kpi-card"><div class="label">RPL</div><div class="value" id="kpi-rpl">—</div></div>
+    <div class="kpi-card"><div class="label">CPC</div><div class="value" id="kpi-cpc">—</div></div>
+    <div class="kpi-card"><div class="label">CVR</div><div class="value" id="kpi-cvr">—</div></div>
+    <div class="kpi-card"><div class="label">Margin $</div><div class="value" id="kpi-margin-d">—</div></div>
+    <div class="kpi-card"><div class="label">Margin %</div><div class="value" id="kpi-margin-p">—</div></div>
+  </div>
+
+  <!-- MTD KPI strip -->
+  <div class="kpi-row" id="mtdRow" style="margin-top:-10px;">
+    <div class="kpi-card" style="border-top-color:#00e5ff"><div class="label">MTD Cost</div><div class="value" id="mtd-cost">—</div></div>
+    <div class="kpi-card" style="border-top-color:#00e5ff"><div class="label">MTD Revenue</div><div class="value" id="mtd-rev">—</div></div>
+    <div class="kpi-card" style="border-top-color:#00e5ff"><div class="label">MTD Margin</div><div class="value" id="mtd-margin">—</div></div>
+    <div class="kpi-card" style="border-top-color:#00e5ff"><div class="label">MTD CPL</div><div class="value" id="mtd-cpl">—</div></div>
+    <div class="kpi-card" style="border-top-color:#00e5ff"><div class="label">MTD RPL</div><div class="value" id="mtd-rpl">—</div></div>
+    <div class="kpi-card" style="border-top-color:#00e5ff"><div class="label">MTD Margin %</div><div class="value" id="mtd-mpct">—</div></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <h3>Hourly Cost vs Revenue</h3>
+      <canvas id="costRevenueChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>Hourly CVR & CTR by Platform</h3>
+      <canvas id="cvrChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Realtime Table -->
+  <div class="section-title">Dashboard 1 — Google Real Time — Platform + Call Center (Actual)</div>
+  <div class="table-wrap">
+    <table id="realtimeTable">
+      <thead>
+        <tr>
+          <th>Hour</th><th>Platform</th><th>Impr</th><th>Clicks</th><th>Cost</th>
+          <th style="background:#007070;color:#a0ffff">Calls Revenue</th>
+          <th style="background:#007070;color:#a0ffff">Data Revenue</th>
+          <th style="background:#007070;color:#a0ffff">Total Revenue</th>
+          <th style="background:#007070;color:#a0ffff">Calls</th>
+          <th style="background:#007070;color:#a0ffff">Data-Submit Form</th>
+        </tr>
+      </thead>
+      <tbody id="realtimeBody"></tbody>
+      <tfoot><tr id="realtimeTotals" style="font-weight:700;background:#12122a"></tr></tfoot>
+    </table>
+  </div>
+
+  <!-- Quality Control Tables -->
+  <div class="quality-row">
+    <!-- Call Quality Control -->
+    <div class="quality-card">
+      <div class="section-title qc-header-call" style="color:#333">Call Quality Control</div>
+      <div class="table-wrap" style="border-radius:0">
+        <table>
+          <thead><tr>
+            <th>Medium Income Call Ratio</th><th>30s</th><th>60s</th><th>90s</th>
+          </tr></thead>
+          <tbody id="callQualityBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Data Quality Control -->
+    <div class="quality-card">
+      <div class="section-title qc-header-data">Data Quality Control</div>
+      <div class="table-wrap" style="border-radius:0">
+        <table>
+          <thead><tr>
+            <th>High Income Verified Carrier</th><th>Low Income</th><th>Medium Income</th><th>High Income</th>
+          </tr></thead>
+          <tbody id="dataQualityBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Attribution Rates -->
+    <div class="quality-card">
+      <div class="section-title qc-header-attr">Attribution Rates</div>
+      <div class="table-wrap" style="border-radius:0">
+        <table>
+          <thead><tr>
+            <th>Hour</th><th>Inbound Call</th><th>Med. Income Verified</th><th>Any Data</th><th>High Inc. + Carrier</th>
+          </tr></thead>
+          <tbody id="attributionBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Insights Panel -->
+  <div class="ai-panel">
+    <h2>🤖 Claude AI — Optimization & Action Engine</h2>
+    <div style="margin-bottom:14px">
+      <button class="ai-run-btn" onclick="runAnomalyDetection()">Run Anomaly Detection</button>
+      <button class="ai-run-btn" style="background:linear-gradient(90deg,#00bcd4,#007fff)" onclick="runDailyBrief()">Run Daily Brief</button>
+    </div>
+    <div id="aiInsightsContainer"><p style="color:#666;font-size:0.85rem">No insights loaded. Click above to run AI analysis.</p></div>
+  </div>
+</div>
+
+<script>
+  const API = '/api';
+  let currentPlatform = 'all';
+  let costRevenueChart, cvrChart;
+
+  // Set today's date as default
+  const dateInput = document.getElementById('dateInput');
+  dateInput.value = new Date().toISOString().split('T')[0];
+
+  function setPlatform(p, btn) {
+    currentPlatform = p;
+    document.querySelectorAll('.platform-tabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadAll();
+  }
+
+  function getDate() { return dateInput.value || new Date().toISOString().split('T')[0]; }
+  function fmt$(v) { return v == null ? '—' : '$' + Number(v).toLocaleString('en', {minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function fmtPct(v) { return v == null ? '—' : (v*100).toFixed(2) + '%'; }
+  function fmtN(v) { return v == null ? '—' : Number(v).toLocaleString(); }
+
+  async function loadAll() {
+    const date = getDate();
+    const pq = currentPlatform !== 'all' ? `&platform=${currentPlatform}` : '';
+    document.getElementById('lastUpdated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+
+    const [kpis, wow, mtd, rt, cq, dq, attr, insights] = await Promise.all([
+      fetch(`${API}/dashboard/kpis?date=${date}${pq}`).then(r=>r.json()),
+      fetch(`${API}/dashboard/wow?date=${date}`).then(r=>r.json()),
+      fetch(`${API}/dashboard/mtd?date=${date}`).then(r=>r.json()),
+      fetch(`${API}/dashboard/realtime?date=${date}`).then(r=>r.json()),
+      fetch(`${API}/dashboard/call-quality?date=${date}`).then(r=>r.json()),
+      fetch(`${API}/dashboard/data-quality?date=${date}`).then(r=>r.json()),
+      fetch(`${API}/dashboard/attribution?date=${date}`).then(r=>r.json()),
+      fetch(`${API}/ai/insights?limit=5`).then(r=>r.json()),
+    ]);
+
+    renderKPIs(kpis, wow);
+    renderMTD(mtd);
+    renderRealtime(rt);
+    renderCallQuality(cq);
+    renderDataQuality(dq);
+    renderAttribution(attr);
+    renderCharts(rt);
+    renderInsights(insights);
+  }
+
+  function renderKPIs(k, w) {
+    document.getElementById('kpi-cpl').textContent = fmt$(k.CPL);
+    document.getElementById('kpi-rpl').textContent = fmt$(k.RPL);
+    document.getElementById('kpi-cpc').textContent = fmt$(k.CPC);
+    document.getElementById('kpi-cvr').textContent = fmtPct(k.CVR);
+    document.getElementById('kpi-margin-d').textContent = fmt$(k.margin_dollar);
+    document.getElementById('kpi-margin-p').textContent = fmtPct(k.margin_pct);
+
+    const wowCvr = w.wow_cvr_pct;
+    const el = document.getElementById('kpi-cpl-wow');
+    if (wowCvr !== undefined) {
+      const sign = wowCvr >= 0 ? '+' : '';
+      el.textContent = `WoW CVR: ${sign}${(wowCvr*100).toFixed(1)}%`;
+      el.className = 'change ' + (wowCvr >= 0 ? 'up' : 'down');
+    }
+  }
+
+  function renderMTD(m) {
+    document.getElementById('mtd-cost').textContent = fmt$(m.mtd_cost);
+    document.getElementById('mtd-rev').textContent = fmt$(m.mtd_revenue);
+    document.getElementById('mtd-margin').textContent = fmt$(m.mtd_margin_dollar);
+    document.getElementById('mtd-cpl').textContent = fmt$(m.mtd_cpl);
+    document.getElementById('mtd-rpl').textContent = fmt$(m.mtd_rpl);
+    document.getElementById('mtd-mpct').textContent = fmtPct(m.mtd_margin_pct);
+  }
+
+  function renderRealtime(rows) {
+    const body = document.getElementById('realtimeBody');
+    const totals = document.getElementById('realtimeTotals');
+    body.innerHTML = '';
+
+    let tImpr=0, tClicks=0, tCost=0, tCallRev=0, tDataRev=0, tTotRev=0, tCalls=0, tForms=0;
+
+    rows.forEach(r => {
+      tImpr += r.impressions||0; tClicks += r.clicks||0; tCost += r.cost||0;
+      tCallRev += r.calls_revenue||0; tDataRev += r.data_revenue||0;
+      tTotRev += r.total_revenue||0; tCalls += r.inbound_calls||0; tForms += r.data_submit_forms||0;
+      const badge = `<span class="platform-badge badge-${r.platform}">${r.platform}</span>`;
+      body.innerHTML += `<tr>
+        <td>${r.hour}:00</td><td>${badge}</td>
+        <td>${fmtN(r.impressions)}</td><td>${fmtN(r.clicks)}</td><td>${fmt$(r.cost)}</td>
+        <td style="color:#00e5ff">${fmt$(r.calls_revenue)}</td>
+        <td style="color:#00e5ff">${fmt$(r.data_revenue)}</td>
+        <td style="color:#00e5ff;font-weight:600">${fmt$(r.total_revenue)}</td>
+        <td style="color:#00e5ff">${fmtN(r.inbound_calls)}</td>
+        <td style="color:#00e5ff">${fmtN(r.data_submit_forms)}</td>
+      </tr>`;
+    });
+
+    totals.innerHTML = `<td>Total</td><td>—</td>
+      <td>${fmtN(tImpr)}</td><td>${fmtN(tClicks)}</td><td>${fmt$(tCost)}</td>
+      <td style="color:#00e5ff">${fmt$(tCallRev)}</td>
+      <td style="color:#00e5ff">${fmt$(tDataRev)}</td>
+      <td style="color:#00e5ff">${fmt$(tTotRev)}</td>
+      <td style="color:#00e5ff">${fmtN(tCalls)}</td>
+      <td style="color:#00e5ff">${fmtN(tForms)}</td>`;
+  }
+
+  function renderCallQuality(rows) {
+    const body = document.getElementById('callQualityBody');
+    body.innerHTML = rows.map(r => `<tr>
+      <td>${r.hour}:00 (${r.total_calls} calls)</td>
+      <td>${fmtPct(r.medium_income_call_ratio_30s)}</td>
+      <td>${fmtPct(r.medium_income_call_ratio_60s)}</td>
+      <td>${fmtPct(r.medium_income_call_ratio_90s)}</td>
+    </tr>`).join('');
+  }
+
+  function renderDataQuality(rows) {
+    const body = document.getElementById('dataQualityBody');
+    body.innerHTML = rows.map(r => `<tr>
+      <td>${r.hour}:00</td>
+      <td>${fmtPct(r.low_income_ratio)}</td>
+      <td>${fmtPct(r.medium_income_ratio)}</td>
+      <td>${fmtPct(r.high_income_ratio)}</td>
+    </tr>`).join('');
+  }
+
+  function renderAttribution(rows) {
+    const body = document.getElementById('attributionBody');
+    body.innerHTML = rows.map(r => `<tr>
+      <td>${r.hour}:00</td>
+      <td>${fmtPct(r.inbound_call_rate)}</td>
+      <td>${fmtPct(r.medium_income_verified_rate)}</td>
+      <td>${fmtPct(r.any_data_rate)}</td>
+      <td>${fmtPct(r.high_income_verified_carrier_rate)}</td>
+    </tr>`).join('');
+  }
+
+  function renderCharts(rows) {
+    // Aggregate by hour across platforms
+    const hourly = {};
+    rows.forEach(r => {
+      if (!hourly[r.hour]) hourly[r.hour] = { cost: 0, revenue: 0, calls: 0, google_cvr: 0, meta_cvr: 0 };
+      hourly[r.hour].cost += r.cost || 0;
+      hourly[r.hour].revenue += r.total_revenue || 0;
+      if (r.platform === 'google') hourly[r.hour].google_cvr = r.cvr || 0;
+      if (r.platform === 'meta') hourly[r.hour].meta_cvr = r.cvr || 0;
+    });
+
+    const hours = Object.keys(hourly).sort((a,b)=>+a-+b);
+    const labels = hours.map(h => h + ':00');
+    const costs = hours.map(h => +hourly[h].cost.toFixed(2));
+    const revs = hours.map(h => +hourly[h].revenue.toFixed(2));
+    const gCvr = hours.map(h => +(hourly[h].google_cvr * 100).toFixed(2));
+    const mCvr = hours.map(h => +(hourly[h].meta_cvr * 100).toFixed(2));
+
+    if (costRevenueChart) costRevenueChart.destroy();
+    costRevenueChart = new Chart(document.getElementById('costRevenueChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Cost $', data: costs, backgroundColor: '#ff00cc88', borderColor: '#ff00cc', borderWidth: 1 },
+          { label: 'Revenue $', data: revs, backgroundColor: '#00e5ff55', borderColor: '#00e5ff', borderWidth: 1 },
+        ]
+      },
+      options: { responsive: true, plugins: { legend: { labels: { color: '#ccc' } } },
+        scales: { x: { ticks: { color: '#aaa' } }, y: { ticks: { color: '#aaa' } } } }
+    });
+
+    if (cvrChart) cvrChart.destroy();
+    cvrChart = new Chart(document.getElementById('cvrChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Google CVR %', data: gCvr, borderColor: '#4285f4', tension: 0.3, fill: false },
+          { label: 'Meta CVR %', data: mCvr, borderColor: '#1877f2', tension: 0.3, fill: false },
+        ]
+      },
+      options: { responsive: true, plugins: { legend: { labels: { color: '#ccc' } } },
+        scales: { x: { ticks: { color: '#aaa' } }, y: { ticks: { color: '#aaa' } } } }
+    });
+  }
+
+  function renderInsights(insights) {
+    const el = document.getElementById('aiInsightsContainer');
+    if (!insights.length) { el.innerHTML = '<p style="color:#666;font-size:0.85rem">No insights yet.</p>'; return; }
+    el.innerHTML = insights.map(i => `
+      <div class="ai-insight-card ${i.severity}">
+        <div class="type-badge">${i.type} · ${i.platform} · ${i.generated_at?.substring(0,16).replace('T',' ')||''}</div>
+        <p>${i.summary}</p>
+      </div>`).join('');
+  }
+
+  async function runAnomalyDetection() {
+    const btn = event.target;
+    btn.textContent = 'Running...'; btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/ai/anomaly-detection?date=${getDate()}`, { method: 'POST' });
+      const data = await res.json();
+      await loadAll();
+    } finally { btn.textContent = 'Run Anomaly Detection'; btn.disabled = false; }
+  }
+
+  async function runDailyBrief() {
+    const btn = event.target;
+    btn.textContent = 'Generating...'; btn.disabled = true;
+    try {
+      await fetch(`${API}/ai/daily-brief?date=${getDate()}`, { method: 'POST' });
+      await loadAll();
+    } finally { btn.textContent = 'Run Daily Brief'; btn.disabled = false; }
+  }
+
+  // Auto-refresh every 5 minutes
+  setInterval(loadAll, 300000);
+  loadAll();
+</script>
+</body>
+</html>
