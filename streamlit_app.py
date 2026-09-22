@@ -232,6 +232,9 @@ def parse_dates(values):
         dtype=object,
     )
 
+def format_dates(values, fmt):
+    return [datetime.strptime(str(value)[:10], "%Y-%m-%d").strftime(fmt) for value in values]
+
 @st.cache_data(ttl=120)
 def load_pm(d=30):
     co=(datetime.utcnow()-timedelta(days=d)).strftime("%Y-%m-%d")
@@ -863,7 +866,7 @@ elif PAGE == "📈  Performance Analysis":
             fig_sc.add_trace(go.Scatter(x=d["CPC"],y=d["CVR"],name=p.title(),mode="markers",
                 marker=dict(color=PC[p],size=d["cost"]/max_cost*18+6,
                             line=dict(color=BG,width=1),opacity=0.85),
-                text=d["date"].dt.strftime("%b %d"),
+                text=format_dates(d["date"], "%b %d"),
                 hovertemplate=f"<b>{p.title()}</b><br>%{{text}}<br>CPC: $%{{x:.2f}}<br>CVR: %{{y:.2f}}%<extra></extra>"))
         cpc_m=pm_d["CPC"].mean(); cvr_m=pm_d["CVR"].mean()
         fig_sc.add_hline(y=cvr_m,line_dash="dot",line_color=BDR2,line_width=1)
@@ -1183,12 +1186,12 @@ elif PAGE == "🤖  ML & Forecasting":
         fig_a=go.Figure()
         if not norm.empty:
             fig_a.add_trace(go.Scatter(x=norm[mx],y=norm[my],mode="markers",name="Normal Day",
-                text=norm["date"].dt.strftime("%b %d"),
+                text=format_dates(norm["date"], "%b %d"),
                 marker=dict(color=GRN3,size=9,opacity=0.7,line=dict(color=BG,width=1)),
                 hovertemplate="<b>%{text}</b><br>"+mx+": %{x:.2f}<br>"+my+": %{y:.2f}<extra>Normal</extra>"))
         if not anoms.empty:
             fig_a.add_trace(go.Scatter(x=anoms[mx],y=anoms[my],mode="markers",name="⚠ Anomaly",
-                text=anoms["date"].dt.strftime("%b %d"),
+                text=format_dates(anoms["date"], "%b %d"),
                 marker=dict(color=RED3,size=14,symbol="x",line=dict(color=RED3,width=2.5)),
                 hovertemplate="<b>%{text} — ANOMALY FLAGGED</b><br>"+mx+": %{x:.2f}<br>"+my+": %{y:.2f}<extra></extra>"))
         pcfg(fig_a,360,f"Anomaly Detection: {mx} vs {my}",lh=True)
@@ -1201,7 +1204,7 @@ elif PAGE == "🤖  ML & Forecasting":
         if not anoms.empty:
             sh("Flagged Anomalous Days","🚨",RED2)
             ad=anoms[["date","cost","revenue","margin","CPL","ROAS","ascore"]].copy()
-            ad["date"]=ad["date"].dt.strftime("%Y-%m-%d")
+            ad["date"]=format_dates(ad["date"], "%Y-%m-%d")
             ad["ascore"]=ad["ascore"].round(4)
             st.dataframe(ad.sort_values("ascore").style
                 .format({"cost":"${:,.0f}","revenue":"${:,.0f}","margin":"${:,.0f}",
@@ -1298,7 +1301,7 @@ elif PAGE == "🤖  ML & Forecasting":
                         fig_cl.add_trace(go.Scatter(x=d["cost"],y=d["revenue"],name=cn,mode="markers",
                             marker=dict(color=color,size=d["ROAS"]*4+6,
                                         line=dict(color=BG,width=1),opacity=0.85),
-                            text=d["date"].dt.strftime("%b %d"),
+                            text=format_dates(d["date"], "%b %d"),
                             hovertemplate=f"<b>{cn}</b><br>%{{text}}<br>Spend:$%{{x:,.0f}}<br>Rev:$%{{y:,.0f}}<extra></extra>"))
                 pcfg(fig_cl,380,"Performance Clusters — Spend vs Revenue (bubble = ROAS)",lh=True)
                 fig_cl.update_layout(xaxis_title="Ad Spend ($)",yaxis_title="Revenue ($)")
@@ -1409,7 +1412,7 @@ elif PAGE == "📞  Call & Attribution":
 
         sh("Call Quality Heatmap — Hour × Day","🌡️",PUR2)
         if not cq_r.empty:
-            cq_h=cq_r.copy(); cq_h["day"]=cq_h["date"].dt.strftime("%m/%d")
+            cq_h=cq_r.copy(); cq_h["day"]=format_dates(cq_h["date"], "%m/%d")
             piv=cq_h.pivot_table(index="hour",columns="day",values="medium_income_call_ratio_30s",aggfunc="mean")
             fig_hm=go.Figure(go.Heatmap(z=piv.values*100,x=piv.columns.tolist(),
                 y=[f"{h:02d}:00" for h in piv.index],
@@ -1716,7 +1719,7 @@ elif PAGE == "⚡  Real-Time Monitor":
         rp.index=[f"{h:02d}:00" for h in rp.index]
         cc_=[c for c in rp.columns if "Cost" in c]
         oc_=[c for c in rp.columns if "Cost" not in c]
-        st.dataframe(rp.style.format(**{c:"${:,.0f}" for c in cc_},**{c:"{:,.0f}" for c in oc_})
+        st.dataframe(rp.style.format(formatter={**{c:"${:,.0f}" for c in cc_},**{c:"{:,.0f}" for c in oc_}})
             .background_gradient(subset=cc_,cmap="RdYlGn_r"),
             use_container_width=True)
         caption("Redder Cost cells = higher spend at that hour. "
