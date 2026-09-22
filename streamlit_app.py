@@ -227,7 +227,7 @@ def conn():
 
 def parse_dates(values):
     return pd.Series(
-        [datetime.strptime(str(value)[:10], "%Y-%m-%d") for value in values],
+        [str(value)[:10] for value in values],
         index=values.index,
         dtype=object,
     )
@@ -324,14 +324,14 @@ def prophet_fc(df, col, periods=14):
     try:
         from prophet import Prophet
         ts=df[["date",col]].rename(columns={"date":"ds",col:"y"}).dropna()
-        ts["ds"]=pd.to_datetime(ts["ds"])
         m=Prophet(daily_seasonality=True,weekly_seasonality=True,changepoint_prior_scale=0.15)
         m.fit(ts); fc=m.predict(m.make_future_dataframe(periods=periods))
         return fc[["ds","yhat","yhat_lower","yhat_upper"]], "Prophet"
     except: pass
     ts=df[["date",col]].dropna().copy(); ts["t"]=np.arange(len(ts))
     lr=LinearRegression().fit(ts[["t"]],ts[col])
-    fd=[ts["date"].iloc[-1]+timedelta(days=i+1) for i in range(periods)]
+    last_date=datetime.strptime(ts["date"].iloc[-1], "%Y-%m-%d")
+    fd=[(last_date+timedelta(days=i+1)).strftime("%Y-%m-%d") for i in range(periods)]
     pv=lr.predict(np.arange(len(ts),len(ts)+periods).reshape(-1,1))
     fc=pd.concat([ts.rename(columns={"date":"ds",col:"yhat"})[["ds","yhat"]],
                   pd.DataFrame({"ds":fd,"yhat":pv,"yhat_lower":pv*.92,"yhat_upper":pv*1.08})],
@@ -491,11 +491,11 @@ pm_r  = load_pm(DAYS); cc_r = load_cc(DAYS)
 cq_r  = load_cq(DAYS); at_r = load_attr(DAYS)
 pm    = pm_r[pm_r["platform"].isin(PF)] if PF else pm_r
 daily = agg(pm, cc_r)
-TD    = daily["date"].max() if not daily.empty else pd.Timestamp.utcnow()
-TD_S  = pd.Timestamp(TD).strftime("%Y-%m-%d")
+TD    = daily["date"].max() if not daily.empty else datetime.utcnow().strftime("%Y-%m-%d")
+TD_S  = TD
 tday  = daily[daily["date"]==TD]
-yday  = daily[daily["date"]==TD-timedelta(days=1)]
-MS    = pd.Timestamp(TD).replace(day=1)
+yday  = daily[daily["date"]==(datetime.strptime(TD, "%Y-%m-%d")-timedelta(days=1)).strftime("%Y-%m-%d")]
+MS    = TD[:7] + "-01"
 mtd   = daily[daily["date"]>=MS]
 
 # ════════════════════════════════════════════════════════════════════════
