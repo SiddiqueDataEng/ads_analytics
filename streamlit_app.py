@@ -225,29 +225,36 @@ p,label,span,div{{color:inherit!important;}}
 def conn():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
+def parse_dates(values):
+    return pd.Series(
+        [datetime.strptime(str(value)[:10], "%Y-%m-%d") for value in values],
+        index=values.index,
+        dtype=object,
+    )
+
 @st.cache_data(ttl=120)
 def load_pm(d=30):
     co=(datetime.utcnow()-timedelta(days=d)).strftime("%Y-%m-%d")
     df=pd.read_sql("SELECT * FROM platform_metrics WHERE date>=? ORDER BY date,hour,platform",conn(),params=(co,))
-    df["date"]=pd.to_datetime(df["date"]); return df
+    df["date"]=parse_dates(df["date"]); return df
 
 @st.cache_data(ttl=120)
 def load_cc(d=30):
     co=(datetime.utcnow()-timedelta(days=d)).strftime("%Y-%m-%d")
     df=pd.read_sql("SELECT * FROM call_center WHERE date>=? ORDER BY date,hour",conn(),params=(co,))
-    df["date"]=pd.to_datetime(df["date"]); return df
+    df["date"]=parse_dates(df["date"]); return df
 
 @st.cache_data(ttl=120)
 def load_cq(d=30):
     co=(datetime.utcnow()-timedelta(days=d)).strftime("%Y-%m-%d")
     df=pd.read_sql("SELECT * FROM call_quality WHERE date>=? ORDER BY date,hour",conn(),params=(co,))
-    df["date"]=pd.to_datetime(df["date"]); return df
+    df["date"]=parse_dates(df["date"]); return df
 
 @st.cache_data(ttl=120)
 def load_attr(d=30):
     co=(datetime.utcnow()-timedelta(days=d)).strftime("%Y-%m-%d")
     df=pd.read_sql("SELECT * FROM attribution_rates WHERE date>=? ORDER BY date,hour",conn(),params=(co,))
-    df["date"]=pd.to_datetime(df["date"]); return df
+    df["date"]=parse_dates(df["date"]); return df
 
 @st.cache_data(ttl=300)
 def load_ins(n=20):
