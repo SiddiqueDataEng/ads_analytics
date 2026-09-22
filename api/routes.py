@@ -11,6 +11,7 @@ from pipeline.transforms import (
     get_topline_kpis, get_realtime_hourly, get_wow_trend,
     get_mtd_summary, get_call_quality_summary,
     get_data_quality_summary, get_attribution_summary,
+    get_conversion_type_profitability,
 )
 from ai.claude_engine import ClaudeEngine
 
@@ -62,6 +63,12 @@ async def attribution(date: Optional[str] = None, db: AsyncSession = Depends(get
     return await get_attribution_summary(db, date or today_str())
 
 
+@router.get("/dashboard/conversion-profitability")
+async def conversion_profitability(date: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    """Blended CPA / net margin per canonical conversion type, harmonized across all platforms."""
+    return await get_conversion_type_profitability(db, date or today_str())
+
+
 @router.post("/ai/anomaly-detection")
 async def run_anomaly(date: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     result = await claude.run_anomaly_detection(db, date or today_str())
@@ -72,6 +79,38 @@ async def run_anomaly(date: Optional[str] = None, db: AsyncSession = Depends(get
 async def run_daily_brief(date: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     result = await claude.run_daily_brief(db, date or today_str())
     return {"id": result.id, "brief": result.full_response}
+
+
+@router.post("/ai/budget-reallocation")
+async def run_budget_reallocation(date: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    result = await claude.run_budget_reallocation(db, date or today_str())
+    return {"id": result.id, "summary": result.summary, "full": result.full_response}
+
+
+@router.post("/ai/fatigue-scan")
+async def run_fatigue_scan(date: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    result = await claude.run_fatigue_scan(db, date or today_str())
+    return {"id": result.id, "severity": result.severity, "summary": result.summary, "full": result.full_response}
+
+
+@router.post("/ai/weekly-strategy")
+async def run_weekly_strategy(date: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    result = await claude.run_weekly_strategy(db, date or today_str())
+    return {"id": result.id, "summary": result.summary, "full": result.full_response}
+
+
+@router.get("/reconciliation")
+async def reconciliation(date: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    """
+    Re-fetches the day straight from Google/Meta/Microsoft and compares it
+    against what's stored. Requires DATA_SOURCE=live and valid credentials —
+    makes real API calls, so use for spot-checks / handover, not polling.
+    """
+    from pipeline.reconciliation import reconcile_day
+    try:
+        return await reconcile_day(db, date or today_str())
+    except ImportError as e:
+        raise HTTPException(status_code=501, detail=f"Live connector SDKs not installed: {e}")
 
 
 @router.get("/ai/insights")

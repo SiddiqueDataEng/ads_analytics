@@ -5,7 +5,7 @@ Self-explaining KPIs · Storytelling · Hover Insights · Issue→Solution→Ben
 Regional Reporting (US, UK, CA, AU)  ·  Quality Score · Impression Share · Forecasting · ML
 """
 # ── stdlib ──────────────────────────────────────────────────────────────
-import os, sqlite3, warnings
+import sqlite3, warnings
 from datetime import datetime, timedelta
 
 # ── third-party ─────────────────────────────────────────────────────────
@@ -27,16 +27,22 @@ warnings.filterwarnings("ignore")
 # ════════════════════════════════════════════════════════════════════════
 #  CONFIG
 # ════════════════════════════════════════════════════════════════════════
-def secret(name):
-    try:
-        value = st.secrets.get(name)
-    except Exception:
-        value = None
-    return value or os.getenv(name, "")
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
+def _get_secret(name: str) -> str:
+    """Load from environment (.env locally) or st.secrets (Streamlit Cloud). Never hardcode keys."""
+    val = os.getenv(name, "")
+    if not val:
+        try:
+            val = st.secrets.get(name, "")
+        except Exception:
+            val = ""
+    return val
 
-OAI_KEY   = secret("OPENAI_API_KEY")
-ANT_KEY   = secret("ANTHROPIC_API_KEY")
+OAI_KEY = _get_secret("OPENAI_API_KEY")
+ANT_KEY = _get_secret("ANTHROPIC_API_KEY")
 DB_PATH   = "ads_dashboard.db"
 BUDGET    = 50_000   # daily budget target
 
@@ -287,16 +293,16 @@ def get_ant(): return anthropic.Anthropic(api_key=ANT_KEY)
 def get_oai(): return OpenAI(api_key=OAI_KEY)
 
 def ask(prompt, eng="Claude", n=900):
+    if eng=="Claude" and not ANT_KEY:
+        return "⚠️ ANTHROPIC_API_KEY not set. Add it to your .env file or Streamlit secrets."
+    if eng!="Claude" and not OAI_KEY:
+        return "⚠️ OPENAI_API_KEY not set. Add it to your .env file or Streamlit secrets."
     try:
         if eng=="Claude":
-            if not ANT_KEY:
-                return "AI analysis is unavailable: configure ANTHROPIC_API_KEY in Streamlit secrets."
             r=get_ant().messages.create(model="claude-opus-4-5",max_tokens=n,
                 messages=[{"role":"user","content":prompt}])
             return r.content[0].text
         else:
-            if not OAI_KEY:
-                return "AI analysis is unavailable: configure OPENAI_API_KEY in Streamlit secrets."
             r=get_oai().chat.completions.create(model="gpt-4o",max_tokens=800,
                 messages=[{"role":"system","content":"Senior paid media analytics expert. Concise, data-driven."},
                           {"role":"user","content":prompt}])
@@ -1709,7 +1715,8 @@ elif PAGE == "⚡  Real-Time Monitor":
         rp.index=[f"{h:02d}:00" for h in rp.index]
         cc_=[c for c in rp.columns if "Cost" in c]
         oc_=[c for c in rp.columns if "Cost" not in c]
-        st.dataframe(rp.style.format(**{c:"${:,.0f}" for c in cc_},**{c:"{:,.0f}" for c in oc_})
+        fmt_ = {c:"${:,.0f}" for c in cc_}; fmt_.update({c:"{:,.0f}" for c in oc_})
+        st.dataframe(rp.style.format(fmt_)
             .background_gradient(subset=cc_,cmap="RdYlGn_r"),
             use_container_width=True)
         caption("Redder Cost cells = higher spend at that hour. "

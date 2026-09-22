@@ -18,6 +18,8 @@ class PlatformMetric(Base):
     date = Column(String(10), nullable=False)
     hour = Column(Integer, nullable=False)
     platform = Column(String(20), nullable=False)   # google | meta | microsoft
+    campaign_id = Column(String(64), nullable=True)      # native platform campaign ID, when available
+    campaign_name = Column(String(255), nullable=True)
     impressions = Column(Integer, default=0)
     clicks = Column(Integer, default=0)
     cost = Column(Float, default=0.0)
@@ -25,9 +27,36 @@ class PlatformMetric(Base):
     cpc = Column(Float, default=0.0)
     ctr = Column(Float, default=0.0)
     cvr = Column(Float, default=0.0)
+    source = Column(String(10), default="synthetic")     # synthetic | live — lets you audit what's real
     created_at = Column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (Index("ix_platform_date_hour", "date", "hour", "platform"),)
+
+
+class ConversionAction(Base):
+    """
+    Cross-platform conversion harmonization.
+    Each platform reports conversions under its own native action names
+    (e.g. Google 'Phone Call Leads', Meta 'onsite_conversion.lead_grouped',
+    Microsoft 'Phone_Call'). This table stores the raw platform-native action
+    alongside the canonical_type it maps to (via pipeline/conversion_mapping.py),
+    so profitability can be computed per conversion type across platforms.
+    """
+    __tablename__ = "conversion_actions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    date = Column(String(10), nullable=False)
+    hour = Column(Integer, nullable=False)
+    platform = Column(String(20), nullable=False)
+    campaign_id = Column(String(64), nullable=True)
+    campaign_name = Column(String(255), nullable=True)
+    native_action_name = Column(String(255), nullable=False)   # exact name as reported by the platform
+    canonical_type = Column(String(50), nullable=False)        # e.g. phone_call | lead_form | purchase | unmapped
+    conversions = Column(Float, default=0.0)
+    conversion_value = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (Index("ix_convaction_date_platform", "date", "platform", "canonical_type"),)
 
 
 class CallCenter(Base):

@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
-from db.models import PlatformMetric, CallCenter, CallQualityControl, DataQualityControl, AttributionRate
+from db.models import PlatformMetric, CallCenter, CallQualityControl, DataQualityControl, AttributionRate, ConversionAction
 
 
 def safe_divide(numerator: float, denominator: float, default: float = 0.0) -> float:
@@ -141,6 +141,59 @@ async def get_mtd_summary(session: AsyncSession, date: str) -> Dict:
         "mtd_cpl": safe_divide(mtd_cost, pm.mtd_conversions or 0),
         "mtd_rpl": safe_divide(mtd_revenue, pm.mtd_conversions or 0),
     }
+
+
+async def get_conversion_type_profitability(session: AsyncSession, date: str) -> List[Dict]:
+    """
+    Blended CPA and conversion mix by CANONICAL conversion type, across all
+    three platforms — this is the harmonized view: 'phone_call' leads from
+    Google, Meta, and Microsoft roll into one row instead of three.
+    Spend is attributed proportionally to each type's share of conversions
+    within a platform/day (spend isn't natively split by conversion action).
+    """
+    conv_q = select(
+        ConversionAction.platform,
+        ConversionAction.canonical_type,
+        func.sum(ConversionAction.conversions).label("conversions"),
+        func.sum(ConversionAction.conversion_value).label("conversion_value"),
+    ).where(ConversionAction.date == date).group_by(
+        ConversionAction.platform, ConversionAction.canonical_type
+    )
+    conv_rows = (await session.execute(conv_q)).all()
+
+    spend_q = select(
+        PlatformMetric.platform, func.sum(PlatformMetric.cost).label("cost")
+    ).where(PlatformMetric.date == date).group_by(PlatformMetric.platform)
+    spend_by_platform = {r.platform: r.cost or 0.0 for r in (await session.execute(spend_q)).all()}
+
+    conv_total_by_platform: Dict[str, float] = {}
+    for r in conv_rows:
+        conv_total_by_platform[r.platform] = conv_total_by_platform.get(r.platform, 0.0) + (r.conversions or 0.0)
+
+    by_type: Dict[str, Dict[str, float]] = {}
+    for r in conv_rows:
+        platform_conversions = conv_total_by_platform.get(r.platform, 0.0)
+        platform_spend = spend_by_platform.get(r.platform, 0.0)
+        share = safe_divide(r.conversions or 0.0, platform_conversions)
+        attributed_spend = platform_spend * share
+
+        bucket = by_type.setdefault(r.canonical_type, {"conversions": 0.0, "revenue": 0.0, "spend": 0.0})
+        bucket["conversions"] += r.conversions or 0.0
+        bucket["revenue"] += r.conversion_value or 0.0
+        bucket["spend"] += attributed_spend
+
+    out = []
+    for ctype, v in by_type.items():
+        out.append({
+            "canonical_type": ctype,
+            "conversions": round(v["conversions"], 1),
+            "attributed_spend": round(v["spend"], 2),
+            "revenue": round(v["revenue"], 2),
+            "blended_cpa": safe_divide(v["spend"], v["conversions"]),
+            "net_margin": round(v["revenue"] - v["spend"], 2),
+            "net_margin_pct": safe_divide(v["revenue"] - v["spend"], v["revenue"]),
+        })
+    return sorted(out, key=lambda r: r["net_margin"], reverse=True)
 
 
 async def get_call_quality_summary(session: AsyncSession, date: str) -> List[Dict]:

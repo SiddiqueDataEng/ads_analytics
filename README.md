@@ -26,25 +26,34 @@ A production-ready, self-explaining multi-platform paid ads analytics system wit
 ads_dashboard/
 ├── streamlit_app.py          # Main dashboard (self-explaining, all 6 pages)
 ├── main.py                   # FastAPI backend entry point
-├── scheduler.py              # APScheduler — hourly data ingestion
+├── scheduler.py              # APScheduler — hourly ingestion + daily/weekly AI jobs
 ├── requirements.txt
+├── HANDOVER.md                # Architecture, live-data setup, reconciliation guide
+│
+├── connectors/
+│   ├── google_ads.py          # Google Ads API (GAQL reporting)
+│   ├── meta_ads.py             # Meta Marketing API (Insights)
+│   ├── microsoft_ads.py        # Bing Ads Reporting API (async)
+│   └── live.py                 # Fans out to all three, isolates per-platform failures
 │
 ├── data_generators/
-│   └── ads_generator.py      # Realistic synthetic data for Google/Meta/Microsoft
+│   └── ads_generator.py      # Synthetic fallback data for Google/Meta/Microsoft
 │
 ├── db/
 │   ├── models.py             # SQLAlchemy ORM models
-│   └── database.py           # Async SQLite engine + session factory
+│   └── database.py           # Async SQLite engine + session factory + migration
 │
 ├── pipeline/
-│   ├── ingest.py             # Bulk insert from generator → DB
-│   └── transforms.py         # KPI calculations: CPL, ROAS, CVR, WoW, MTD
+│   ├── ingest.py              # Bulk insert from generator or live connectors → DB
+│   ├── transforms.py          # KPI calculations: CPL, ROAS, CVR, WoW, MTD, conversion-type profitability
+│   ├── conversion_mapping.py  # Harmonizes each platform's native conversion actions into canonical types
+│   └── reconciliation.py      # Diffs stored data against a fresh live pull
 │
 ├── ai/
-│   └── claude_engine.py      # Claude anomaly detection + daily brief engine
+│   └── claude_engine.py      # Claude anomaly detection, budget reallocation, fatigue scan, weekly strategy
 │
 ├── api/
-│   └── routes.py             # FastAPI endpoints for all KPI data
+│   └── routes.py             # FastAPI endpoints for all KPI + AI data
 │
 └── frontend/
     └── index.html            # Static HTML dashboard (alternative frontend)
@@ -62,16 +71,11 @@ pip install -r requirements.txt
 
 ### 2. Configure environment
 
-Copy `.env.example` to `.env` and fill in your API keys:
-
 ```bash
 cp .env.example .env
 ```
 
-```env
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-proj-...
-```
+Fill in `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` at minimum. Leave `DATA_SOURCE=synthetic` to run with no ad-platform credentials, or set `DATA_SOURCE=live` and fill in the Google/Meta/Microsoft credential blocks — see **HANDOVER.md** for where to get each one.
 
 ### 3. Run the Streamlit dashboard
 
@@ -87,7 +91,7 @@ Opens at **http://localhost:8501**
 uvicorn main:app --reload --port 8000
 ```
 
-On first run, automatically seeds **30 days of realistic synthetic data** across all platforms and starts the hourly scheduler.
+On first run with an empty DB: seeds 30 days of synthetic history (`DATA_SOURCE=synthetic`) or pulls 30 days of real history from the connected platforms (`DATA_SOURCE=live`), then starts the scheduler — hourly ingestion, daily AI analysis at 7am UTC, weekly strategy every Monday.
 
 ---
 
@@ -161,12 +165,20 @@ Every section follows the **Issue → Analysis → Benefit** pattern:
 ## API Endpoints (FastAPI)
 
 ```
-GET  /api/topline-kpis?date=YYYY-MM-DD
-GET  /api/realtime-hourly?date=YYYY-MM-DD
-GET  /api/wow-trend?date=YYYY-MM-DD
-GET  /api/mtd-summary?date=YYYY-MM-DD
-GET  /api/call-quality?date=YYYY-MM-DD
-GET  /api/attribution?date=YYYY-MM-DD
-POST /api/run-anomaly-detection
-POST /api/run-daily-brief
+GET  /api/health
+GET  /api/dashboard/kpis?date=YYYY-MM-DD&platform=google|meta|microsoft
+GET  /api/dashboard/realtime?date=YYYY-MM-DD
+GET  /api/dashboard/wow?date=YYYY-MM-DD
+GET  /api/dashboard/mtd?date=YYYY-MM-DD
+GET  /api/dashboard/call-quality?date=YYYY-MM-DD
+GET  /api/dashboard/data-quality?date=YYYY-MM-DD
+GET  /api/dashboard/attribution?date=YYYY-MM-DD
+GET  /api/dashboard/conversion-profitability?date=YYYY-MM-DD
+GET  /api/reconciliation?date=YYYY-MM-DD        # live mode only — diffs stored vs. fresh API pull
+POST /api/ai/anomaly-detection?date=YYYY-MM-DD
+POST /api/ai/daily-brief?date=YYYY-MM-DD
+POST /api/ai/budget-reallocation?date=YYYY-MM-DD
+POST /api/ai/fatigue-scan?date=YYYY-MM-DD
+POST /api/ai/weekly-strategy?date=YYYY-MM-DD
+GET  /api/ai/insights?limit=10
 ```

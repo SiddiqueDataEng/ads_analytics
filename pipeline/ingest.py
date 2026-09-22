@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from db.models import (
     PlatformMetric, CallCenter, CallQualityControl,
-    DataQualityControl, AttributionRate
+    DataQualityControl, AttributionRate, ConversionAction
 )
 
 
@@ -73,10 +73,25 @@ async def ingest_attribution_rates(session: AsyncSession, rows: List[Dict[str, A
     await session.commit()
 
 
+async def ingest_conversion_actions(session: AsyncSession, rows: List[Dict[str, Any]]):
+    for row in rows:
+        await session.execute(
+            delete(ConversionAction).where(
+                ConversionAction.date == row["date"],
+                ConversionAction.hour == row["hour"],
+                ConversionAction.platform == row["platform"],
+                ConversionAction.native_action_name == row["native_action_name"],
+            )
+        )
+        session.add(ConversionAction(**row))
+    await session.commit()
+
+
 async def ingest_all(session: AsyncSession, data: Dict[str, List[Dict]]):
-    """Ingest a full batch from the generator into all tables."""
+    """Ingest a full batch from the generator (or a live connector) into all tables."""
     await ingest_platform_metrics(session, data.get("platform_metrics", []))
     await ingest_call_center(session, data.get("call_center", []))
     await ingest_call_quality(session, data.get("call_quality", []))
     await ingest_data_quality(session, data.get("data_quality", []))
     await ingest_attribution_rates(session, data.get("attribution_rates", []))
+    await ingest_conversion_actions(session, data.get("conversion_actions", []))
