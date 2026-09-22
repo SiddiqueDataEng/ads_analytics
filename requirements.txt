@@ -1,6 +1,7 @@
 # ── Core Dashboard ────────────────────────────────────────────
 streamlit==1.54.0
-plotly==6.5.2
+# Plotly is imported by streamlit_app.py; keep it in the Cloud install set.
+plotly>=6.5.2,<7
 pandas==2.2.3
 numpy==2.2.0
 
